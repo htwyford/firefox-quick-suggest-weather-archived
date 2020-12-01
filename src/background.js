@@ -80,28 +80,6 @@ class ProviderDynamicWeatherTest extends UrlbarProvider {
   constructor() {
     super();
 
-    let daysOfWeek = [];
-    for (let day = 0; day < 5; day++) {
-      daysOfWeek.push({
-        name: `day${day}`,
-        tag: "div",
-        children: [
-          {
-            name: `dayOfWeek${day}`,
-            tag: "span",
-          },
-          {
-            name: `dayIcon${day}`,
-            tag: "img",
-          },
-          {
-            name: `dayTemperature${day}`,
-            tag: "span",
-          },
-        ],
-      });
-    }
-
     // Register our dynamic result type.
     UrlbarResult.addDynamicResultType(DYNAMIC_TYPE_NAME);
     UrlbarView.addDynamicViewTemplate(DYNAMIC_TYPE_NAME, {
@@ -112,49 +90,54 @@ class ProviderDynamicWeatherTest extends UrlbarProvider {
       },
       children: [
         {
-          name: "info",
-          tag: "div",
+          name: "noWrap",
+          tag: "span",
+          classList: ["urlbarView-no-wrap"],
           children: [
             {
-              name: "location",
-              tag: "span",
-            },
-            {
-              name: "forecastTime",
-              tag: "span",
-            },
-            {
-              name: "currentConditions",
-              tag: "span",
-            },
-            {
-              name: "provider",
-              tag: "span",
-            },
-          ],
-        },
-        {
-          name: "current",
-          tag: "div",
-          children: [
-            {
-              name: "currentIcon",
+              name: "icon",
               tag: "img",
+              classList: ["urlbarView-icon"],
             },
             {
-              name: "currentTemperature",
-              tag: "span",
-            },
-            {
-              name: "currentUnits",
-              tag: "span",
+              name: "textContent",
+              tag: "div",
+              children: [
+                {
+                  name: "title",
+                  // We set this in <strong> tags as "fake" title highlighting.
+                  // We don't actually autocomplete any part of the title
+                  // but we want visual consistency with other results, so we
+                  // bold it as if it is autocompleted.
+                  tag: "strong",
+                  classList: ["urlbarView-title"],
+                },
+                {
+                  name: "weatherInfo",
+                  tag: "span",
+                  children: [
+                    {
+                      name: "currentTemperature",
+                      tag: "span",
+                    },
+                    {
+                      name: "forecastDay",
+                      tag: "span",
+                    },
+                    {
+                      name: "separator",
+                      tag: "span",
+                      classList: ["urlbarView-title-separator"],
+                    },
+                    {
+                      name: "location",
+                      tag: "span",
+                    },
+                  ],
+                },
+              ],
             },
           ],
-        },
-        {
-          name: "daysContainer",
-          tag: "div",
-          children: daysOfWeek,
         },
       ],
     });
@@ -225,56 +208,27 @@ class ProviderDynamicWeatherTest extends UrlbarProvider {
   // Updates the result's view.
   getViewUpdate(result) {
     let viewUpdate = {
-      location: {
-        textContent: result.payload.locationName,
-      },
-      forecastTime: {
-        textContent: result.payload.forecastTime,
-      },
-      currentConditions: {
-        textContent: result.payload.current.conditions,
-      },
-      provider: {
-        textContent: result.payload.providerName,
-      },
-      currentIcon: {
-        attributes: {
-          src: result.payload.current.icon,
-        },
+      title: {
+        textContent: result.payload.title,
       },
       currentTemperature: {
-        textContent: result.payload.current.temperature,
+        textContent: `${result.payload.current.temperature}${result.payload.units} `,
       },
-      currentUnits: {
-        textContent: result.payload.units,
+      forecastDay: {
+        textContent: result.payload.forecastDay,
+      },
+      location: {
+        // TODO: When this is localized to non-EN regions, we will need to
+        // review how punctuation is handled here.
+        textContent: `${result.payload.cityName}, ${result.payload.adminAreaCode}`,
+      },
+      icon: {
+        attributes: {
+          src: result.payload.icon,
+          alt: result.payload.iconDescription,
+        },
       },
     };
-
-    for (let day = 0; day < 5; day++) {
-      if (!result.payload.daily[day]) {
-        viewUpdate[`day${day}`] = {
-          style: {
-            display: "none",
-          },
-        };
-        continue;
-      }
-      viewUpdate[`dayOfWeek${day}`] = {
-        textContent: result.payload.daily[day].dayOfWeek,
-      };
-      viewUpdate[`dayIcon${day}`] = {
-        attributes: {
-          src: result.payload.daily[day].icon,
-        },
-      };
-      viewUpdate[`dayTemperature${day}`] = {
-        textContent:
-          result.payload.daily[day].temperatureHigh +
-          "° / " +
-          result.payload.daily[day].temperatureLow +
-          "°",
-      };
-    }
 
     return viewUpdate;
   }
@@ -286,15 +240,8 @@ class ProviderDynamicWeatherTest extends UrlbarProvider {
       return;
     }
 
-    const longDateFormatter = new Intl.DateTimeFormat("default", {
-      weekday: "long",
-      hour: "numeric",
-      minute: "2-digit",
-      timeZone: data.location.TimeZone.Name,
-    });
-
     const dayOfWeekFormatter = new Intl.DateTimeFormat("default", {
-      weekday: "short",
+      weekday: "long",
       timeZone: data.location.TimeZone.Name,
     });
 
@@ -305,20 +252,26 @@ class ProviderDynamicWeatherTest extends UrlbarProvider {
       UrlbarUtils.RESULT_TYPE.DYNAMIC,
       UrlbarUtils.RESULT_SOURCE.OTHER_NETWORK,
       {
+        title: queryContext.searchString,
+        // TODO: Add these icons locally.
+        icon: `https://developer.accuweather.com/sites/default/files/${iconNumber}-s.png`,
+        iconDescription: data.current.WeatherText,
         url: data.current.Link,
-        providerName: "Data Provided by AccuWeather",
-        locationName: data.location.LocalizedName,
+        cityName: data.location.LocalizedName,
+        // We show the state code for locations in the United States and the
+        // country code for all other places.
+        adminAreaCode:
+          data.location.Country.ID == "US"
+            ? data.location.AdministrativeArea.ID
+            : data.location.AdministrativeArea.CountryID,
         // Convert UNIX time in seconds to milliseconds for the Date() object.
-        forecastTime: longDateFormatter.format(data.current.EpochTime * 1000),
+        forecastDay: dayOfWeekFormatter.format(data.current.EpochTime * 1000),
         units: `°${
           this._isMetric(data.location)
             ? data.current.Temperature.Metric.Unit
             : data.current.Temperature.Imperial.Unit
         }`,
         current: {
-          conditions: data.current.WeatherText,
-          // TODO: Store these icons locally.
-          icon: `https://developer.accuweather.com/sites/default/files/${iconNumber}-s.png`,
           temperature: Math.round(
             this._isMetric(data.location)
               ? data.current.Temperature.Metric.Value
@@ -328,7 +281,7 @@ class ProviderDynamicWeatherTest extends UrlbarProvider {
         dynamicType: DYNAMIC_TYPE_NAME,
       }
     );
-    result.suggestedIndex = 1;
+    result.suggestedIndex = queryContext.maxResults - 1;
     addCallback(this, result);
   }
 
