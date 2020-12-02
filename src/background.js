@@ -61,6 +61,20 @@ class CachedWeatherResult {
  */
 let cachedWeatherResults = new Map();
 
+/**
+ * A map of location names that did not return results and at which time that
+ * location was searched. We keep track of this to avoid hammering AccuWeather's
+ * servers with repeated requests for bogus locations. We keep track of the time
+ * in case no data was returned to due to server outages or if the user's
+ * internet is down.
+ *
+ * Key {string}
+ *   Location query. e.g., "nyc", "berlin".
+ * Value {Date}
+ *   The time at which the request returned no results.
+ */
+let invalidLocations = new Map();
+
 // Our provider.
 class ProviderDynamicWeatherTest extends UrlbarProvider {
   constructor() {
@@ -155,6 +169,8 @@ class ProviderDynamicWeatherTest extends UrlbarProvider {
   }
 
   async isActive(queryContext) {
+    let queryInstance = {};
+    this.queryInstance = queryInstance;
     this._currentLocationString = this._getLocationString(
       queryContext.searchString
     );
@@ -174,16 +190,30 @@ class ProviderDynamicWeatherTest extends UrlbarProvider {
       // We need to refresh the cache.
       cachedWeatherResults.delete(this._currentLocationString);
 
+      // Do not fetch data if this query recently failed to return results.
+      let timedOutDate = invalidLocations.get(this._currentLocationString);
+      if (timedOutDate && timedOutDate < Date.now() + DEFAULT_EXPIRY) {
+        return false;
+      }
+      invalidLocations.delete(this._currentLocationString);
+
       let locationResponse = await this.getLocationDataFromQuery(
         this._currentLocationString
       );
-
       if (!locationResponse) {
+        invalidLocations.set(this._currentLocationString, Date.now());
+        return false;
+      }
+      if (this.queryInstance != queryInstance) {
         return false;
       }
 
       let data = await this.getWeatherData(locationResponse);
       if (!data) {
+        invalidLocations.set(this._currentLocationString, Date.now());
+        return false;
+      }
+      if (this.queryInstance != queryInstance) {
         return false;
       }
       cachedWeatherResults.set(this._currentLocationString, data);
