@@ -17,7 +17,6 @@
   },
   "permissions": [
     "https://apidev.accuweather.com/*",
-    "geolocation",
     "tabs",
     "urlbar"
   ],
