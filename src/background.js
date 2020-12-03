@@ -20,6 +20,68 @@ const TEST_LOCATION_JSON = JSON.parse(
   `{"Version":1,"Key":"3393497","Type":"City","Rank":55,"LocalizedName":"Waterfront Communities","EnglishName":"Waterfront Communities","PrimaryPostalCode":"M5J","Region":{"ID":"NAM","LocalizedName":"North America","EnglishName":"North America"},"Country":{"ID":"CA","LocalizedName":"Canada","EnglishName":"Canada"},"AdministrativeArea":{"ID":"ON","LocalizedName":"Ontario","EnglishName":"Ontario","Level":1,"LocalizedType":"Province","EnglishType":"Province","CountryID":"CA"},"TimeZone":{"Code":"EST","Name":"America/Toronto","GmtOffset":-5,"IsDaylightSaving":false,"NextOffsetChange":"2021-03-14T07:00:00Z"},"GeoPosition":{"Latitude":43.645,"Longitude":-79.379,"Elevation":{"Metric":{"Value":81,"Unit":"m","UnitType":5},"Imperial":{"Value":265,"Unit":"ft","UnitType":0}}},"IsAlias":false,"ParentCity":{"Key":"55488","LocalizedName":"Toronto","EnglishName":"Toronto"},"SupplementalAdminAreas":[{"Level":2,"LocalizedName":"Toronto","EnglishName":"Toronto"}],"DataSets":["AirQualityCurrentConditions","AirQualityForecasts","Alerts","ForecastConfidence","FutureRadar","MinuteCast","Radar"]}`
 );
 
+/**
+ * AccuWeather returns a number 1-44 representing a weather condition. ICON_MAP
+ * maps these numbers to the name of an SVG file depicting the associated
+ * condition. The comments to the right are AccuWeather's description
+ * of that icon number.
+ *
+ * AccuWeather's map of icon numbers to icons is available in their API
+ * documentation: https://apidev.accuweather.com/developers/weatherIcons.
+ *
+ * We ignore prettier for this object to allow for the spaces before the
+ * comments.
+ */
+// prettier-ignore
+const ICON_MAP = {
+  1: "day-sunny.svg",             // Sunny
+  2: "day-sunny-overcast.svg",    // Mostly Sunny
+  3: "day-cloudy.svg",            // Partly Sunny
+  4: "day-sunny-overcast.svg",    // Intermittent Clouds
+  5: "day-haze.svg",              // Hazy Sunshine
+  6: "day-cloudy.svg",            // Mostly Cloudy
+  7: "cloudy.svg",                // Cloudy
+  8: "cloudy.svg",                // Dreary (Overcast)
+  // 9 is unassigned.
+  // 10 is unassigned.
+  11: "fog.svg",                  // Fog
+  12: "showers.svg",              // Showers
+  13: "day-showers.svg",          // Mostly Cloudy w/ Showers
+  14: "day-showers.svg",          // Partly Sunny w/ Showers
+  15: "thunderstorm.svg",         // T-Storms
+  16: "day-thunderstorm.svg",     // Mostly Cloudy w/ T-Storms
+  17: "day-thunderstorm.svg",     // Partly Sunny w/ T-Storms
+  18: "rain.svg",                 // Rain
+  19: "snow-wind.svg",            // Flurries
+  20: "day-snow-wind.svg",        // Mostly Cloudy w/ Flurries
+  21: "day-snow-wind.svg",        // Partly Sunny w/ Flurries
+  22: "snow.svg",                 // Snow
+  23: "day-snow.svg",             // Mostly Cloudy w/ Snow
+  24: "snowflake-cold.svg",       // Ice
+  25: "sleet.svg",                // Sleet
+  26: "rain-mix.svg",             // Freezing Rain
+  // 27 is unassigned.
+  // 28 is unassigned.
+  29: "rain-mix.svg",             // Rain and Snow
+  30: "hot.svg",                  // Hot
+  31: "snowflake-cold.svg",       // Cold
+  32: "strong-wind.svg",          // Windy
+  33: "night-clear.svg",          // Clear (Night)
+  34: "night-partly-cloudy.svg",  // Mostly Clear (Night)
+  35: "night-partly-cloudy.svg",  // Partly Cloudy (Night)
+  36: "night-partly-cloudy.svg",  // Intermittent Clouds (Night)
+  37: "night-fog.svg",            // Hazy Moonlight (Night)
+  38: "night-cloudy.svg",         // Mostly Cloudy (Night)
+  39: "night-showers.svg",        // Partly Cloudy w/ Showers (Night)
+  40: "night-showers.svg",        // Mostly Cloudy w/ Showers (Night)
+  41: "night-thunderstorm.svg",   // Partly Cloudy w/ T-Storms (Night)
+  42: "night-thunderstorm.svg",   // Mostly Cloudy w/ T-Storms (Night)
+  43: "night-snow-wind.svg",      // Mostly Cloudy w/ Flurries (Night)
+  44: "night-snow.svg",           // Mostly Cloudy w/ Snow (Night)
+};
+
+const DEFAULT_ICON = "thermometer.svg";
+
 // By default, data expire after 10 minutes.
 const DEFAULT_EXPIRY = 1000 * 60 * 10;
 
@@ -245,16 +307,15 @@ class ProviderDynamicWeatherTest extends UrlbarProvider {
       timeZone: data.location.TimeZone.Name,
     });
 
-    // The API returns a number representing an icon. Accessing the icon via
-    // URL requires padding zeroes.
-    let iconNumber = data.current.WeatherIcon.toString().padStart(2, "0");
+    let iconName = `icons/${ICON_MAP[data.current.WeatherIcon] ||
+      DEFAULT_ICON}`;
+    let icon = browser.runtime.getURL(iconName);
     let result = new UrlbarResult(
       UrlbarUtils.RESULT_TYPE.DYNAMIC,
       UrlbarUtils.RESULT_SOURCE.OTHER_NETWORK,
       {
         title: queryContext.searchString,
-        // TODO: Add these icons locally.
-        icon: `https://developer.accuweather.com/sites/default/files/${iconNumber}-s.png`,
+        icon,
         iconDescription: data.current.WeatherText,
         url: data.current.Link,
         cityName: data.location.LocalizedName,
