@@ -17,6 +17,7 @@
   },
   "permissions": [
     "https://apidev.accuweather.com/*",
+    "runtime",
     "tabs",
     "urlbar"
   ],
