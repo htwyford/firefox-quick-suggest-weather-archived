@@ -83,19 +83,18 @@ const DEFAULT_ICON = "thermometer.svg";
 // By default, data expire after 10 minutes.
 const DEFAULT_EXPIRY = 1000 * 60 * 10;
 
-class CachedWeatherResult {
-  constructor(current, location, expiry = Date.now() + DEFAULT_EXPIRY) {
-    this._currentData = current;
+class CachedWeatherData {
+  constructor(weatherData, location, expiry = Date.now() + DEFAULT_EXPIRY) {
+    this._weatherData = weatherData;
     this._locationData = location;
     this._expiryTime = expiry;
   }
 
   /**
-   * Returns the current weather. AccuWeather returns current weather as a
-   * single-element array, so the first element of the array is returned.
+   * Returns the current weather.
    */
-  get current() {
-    return this._currentData?.[0];
+  get weather() {
+    return this._weatherData;
   }
 
   /**
@@ -113,9 +112,9 @@ class CachedWeatherResult {
 /**
  *  Key {string}
  *    Location query. e.g., "nyc", "berlin".
- *  Value {CachedWeatherResult}
+ *  Value {CachedWeatherData}
  */
-let cachedWeatherResults = new Map();
+let cachedWeatherData = new Map();
 
 /**
  * A map of location names that did not return results and at which time that
@@ -153,7 +152,7 @@ class ProviderQuickSuggestWeather extends UrlbarProvider {
             {
               name: "icon",
               tag: "img",
-              classList: ["urlbarView-icon"],
+              classList: ["urlbarView-favicon"],
             },
             {
               name: "textContent",
@@ -221,13 +220,10 @@ class ProviderQuickSuggestWeather extends UrlbarProvider {
       return false;
     }
 
-    this._currentLocationString = this._getLocationString(
-      queryContext.searchString
-    );
-    let cachedResult = cachedWeatherResults.get(this._currentLocationString);
+    let cachedResult = cachedWeatherData.get(this._currentLocationString);
     if (!cachedResult || cachedResult.isExpired()) {
       // We need to refresh the cache.
-      cachedWeatherResults.delete(this._currentLocationString);
+      cachedWeatherData.delete(this._currentLocationString);
 
       // Do not fetch data if this query recently failed to return results.
       let timedOutDate = invalidLocations.get(this._currentLocationString);
@@ -251,14 +247,14 @@ class ProviderQuickSuggestWeather extends UrlbarProvider {
       }
 
       let data = await this.getWeatherData(locationResponse);
-      if (!data || !data.current) {
+      if (!data || !data.weather) {
         invalidLocations.set(this._currentLocationString, Date.now());
         return false;
       }
       if (this.queryInstance != queryInstance) {
         return false;
       }
-      cachedWeatherResults.set(this._currentLocationString, data);
+      cachedWeatherData.set(this._currentLocationString, data);
     }
 
     return true;
@@ -271,7 +267,7 @@ class ProviderQuickSuggestWeather extends UrlbarProvider {
         textContent: result.payload.title,
       },
       currentTemperature: {
-        textContent: `${result.payload.current.temperature}${result.payload.units} `,
+        textContent: `${result.payload.weatherData.temperature}${result.payload.units} `,
       },
       forecastDay: {
         textContent: result.payload.forecastDay,
@@ -293,7 +289,7 @@ class ProviderQuickSuggestWeather extends UrlbarProvider {
   }
 
   async startQuery(queryContext, addCallback) {
-    let data = cachedWeatherResults.get(this._currentLocationString);
+    let data = cachedWeatherData.get(this._currentLocationString);
 
     if (!data) {
       return;
@@ -304,7 +300,7 @@ class ProviderQuickSuggestWeather extends UrlbarProvider {
       timeZone: data.location.TimeZone.Name,
     });
 
-    let iconName = `icons/${ICON_MAP[data.current.WeatherIcon] ||
+    let iconName = `icons/${ICON_MAP[data.weather.WeatherIcon] ||
       DEFAULT_ICON}`;
     let icon = browser.runtime.getURL(iconName);
     let result = new UrlbarResult(
@@ -313,8 +309,8 @@ class ProviderQuickSuggestWeather extends UrlbarProvider {
       {
         title: queryContext.searchString,
         icon,
-        iconDescription: data.current.WeatherText,
-        url: data.current.Link,
+        iconDescription: data.weather.WeatherText,
+        url: data.weather.Link,
         cityName: data.location.LocalizedName,
         // We show the state code for locations in the United States and the
         // country code for all other places.
@@ -323,17 +319,17 @@ class ProviderQuickSuggestWeather extends UrlbarProvider {
             ? data.location.AdministrativeArea.ID
             : data.location.AdministrativeArea.CountryID,
         // Convert UNIX time in seconds to milliseconds for the Date() object.
-        forecastDay: dayOfWeekFormatter.format(data.current.EpochTime * 1000),
+        forecastDay: dayOfWeekFormatter.format(data.weather.EpochTime * 1000),
         units: `°${
           this._isMetric(data.location)
-            ? data.current.Temperature.Metric.Unit
-            : data.current.Temperature.Imperial.Unit
+            ? data.weather.Temperature.Metric.Unit
+            : data.weather.Temperature.Imperial.Unit
         }`,
-        current: {
+        weatherData: {
           temperature: Math.round(
             this._isMetric(data.location)
-              ? data.current.Temperature.Metric.Value
-              : data.current.Temperature.Imperial.Value
+              ? data.weather.Temperature.Metric.Value
+              : data.weather.Temperature.Imperial.Value
           ),
         },
         dynamicType: DYNAMIC_TYPE_NAME,
@@ -355,16 +351,16 @@ class ProviderQuickSuggestWeather extends UrlbarProvider {
    * @param {object} locationData
    *   JSON data from the AccuWeather Geoposition API. See
    *   getLocationDataFromQuery.
-   * @returns {CachedWeatherResult}
-   *   Resolves to a CachedWeatherResult containing weather data, location data,
+   * @returns {CachedWeatherData}
+   *   Resolves to a CachedWeatherData containing weather data, location data,
    *   and an expiry time.
    */
   async getWeatherData(locationData) {
     const storage = await browser.storage.local.get(null);
     if (storage.testWeatherJson) {
       let expiry = Date.now() + (storage.testExpiry || DEFAULT_EXPIRY);
-      return new CachedWeatherResult(
-        storage.testWeatherJson,
+      return new CachedWeatherData(
+        storage.testWeatherJson[0],
         locationData,
         expiry
       );
@@ -376,7 +372,6 @@ class ProviderQuickSuggestWeather extends UrlbarProvider {
     }
 
     const url = new URL("https://apidev.accuweather.com");
-    // First, fetch current weather data.
     url.pathname = `currentconditions/v1/${locationKey}.json`;
     // eslint-disable-next-line no-undef
     url.searchParams.append("apikey", ACCUWEATHER_SECRET_KEY);
@@ -385,11 +380,17 @@ class ProviderQuickSuggestWeather extends UrlbarProvider {
     if (!response || !response.ok) {
       return null;
     }
-    const currentJson = await response.json();
+
     const expiryHeader = response.headers.get("Expiry");
     let expiry = expiryHeader ? new Date(expiryHeader) : null;
 
-    return new CachedWeatherResult(currentJson, locationData, expiry);
+    const json = await response.json();
+    if (!json.length) {
+      // AccuWeather returns current weather as a single-element array.
+      return null;
+    }
+
+    return new CachedWeatherData(json[0], locationData, expiry);
   }
 
   /**
@@ -434,24 +435,27 @@ class ProviderQuickSuggestWeather extends UrlbarProvider {
    *   returns "berlin". If no location is detected, the empty string is returned.
    */
   _getLocationString(searchString) {
+    searchString = searchString.toLocaleLowerCase();
+    let locationString = "";
     if (searchString.endsWith(" weather")) {
-      return searchString.slice(0, searchString.indexOf(" weather"));
+      locationString = searchString.slice(0, searchString.indexOf(" weather"));
     } else if (searchString.endsWith(" forecast")) {
-      return searchString.slice(0, searchString.indexOf(" forecast"));
+      locationString = searchString.slice(0, searchString.indexOf(" forecast"));
     } else if (
       searchString.includes("weather in") ||
       searchString.includes("weather at")
     ) {
-      return searchString
-        .slice(
-          // 7: "weather".length
-          // 3: " at"/" in".length
-          searchString.indexOf("weather") + 7 + 3
-        )
-        .trim();
+      locationString = searchString.slice(
+        // 7: "weather".length
+        // 3: " at"/" in".length
+        searchString.indexOf("weather") + 7 + 3
+      );
+    } else if (searchString.startsWith("weather ")) {
+      // 8: "weather ".length
+      locationString = searchString.slice(8);
     }
 
-    return "";
+    return locationString.trim();
   }
 
   /**
