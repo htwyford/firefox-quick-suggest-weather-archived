@@ -8,17 +8,15 @@ const URLBAR_PROVIDER_NAME = "weather-result";
 const DYNAMIC_TYPE_NAME = "dynamicWeather";
 
 /**
- * If true, use dummy data. Before setting this to false, create
- * src/secret_keys.js and populate it with:
- * const ACCUWEATHER_SECRET_KEY = "<AccuWeather API key>";
+ * Logs a debug message, which the test harness interprets as a message the
+ * add-on is sending to the test.  See head.js for info.
+ *
+ * @param {string} msg
+ *   The message.
  */
-const TESTING_MODE = true;
-const TEST_CURRENT_JSON = JSON.parse(
-  `[{"LocalObservationDateTime":"2020-11-16T14:28:00-05:00","EpochTime":1605554880,"WeatherText":"Cloudy","WeatherIcon":7,"HasPrecipitation":false,"PrecipitationType":null,"IsDayTime":true,"Temperature":{"Metric":{"Value":3.9,"Unit":"C","UnitType":17},"Imperial":{"Value":39,"Unit":"F","UnitType":18}},"MobileLink":"http://m.accuweather.com/en/ca/waterfront-communities/m5j/current-weather/3393497?lang=en-us","Link":"http://www.accuweather.com/en/ca/waterfront-communities/m5j/current-weather/3393497?lang=en-us"}]`
-);
-const TEST_LOCATION_JSON = JSON.parse(
-  `{"Version":1,"Key":"3393497","Type":"City","Rank":55,"LocalizedName":"Waterfront Communities","EnglishName":"Waterfront Communities","PrimaryPostalCode":"M5J","Region":{"ID":"NAM","LocalizedName":"North America","EnglishName":"North America"},"Country":{"ID":"CA","LocalizedName":"Canada","EnglishName":"Canada"},"AdministrativeArea":{"ID":"ON","LocalizedName":"Ontario","EnglishName":"Ontario","Level":1,"LocalizedType":"Province","EnglishType":"Province","CountryID":"CA"},"TimeZone":{"Code":"EST","Name":"America/Toronto","GmtOffset":-5,"IsDaylightSaving":false,"NextOffsetChange":"2021-03-14T07:00:00Z"},"GeoPosition":{"Latitude":43.645,"Longitude":-79.379,"Elevation":{"Metric":{"Value":81,"Unit":"m","UnitType":5},"Imperial":{"Value":265,"Unit":"ft","UnitType":0}}},"IsAlias":false,"ParentCity":{"Key":"55488","LocalizedName":"Toronto","EnglishName":"Toronto"},"SupplementalAdminAreas":[{"Level":2,"LocalizedName":"Toronto","EnglishName":"Toronto"}],"DataSets":["AirQualityCurrentConditions","AirQualityForecasts","Alerts","ForecastConfidence","FutureRadar","MinuteCast","Radar"]}`
-);
+function sendTestMessage(msg) {
+  console.debug(browser.runtime.id, msg);
+}
 
 /**
  * AccuWeather returns a number 1-44 representing a weather condition. ICON_MAP
@@ -108,11 +106,7 @@ class CachedWeatherResult {
   }
 
   isExpired() {
-    if (TESTING_MODE) {
-      return false;
-    }
-
-    return Date.now > this._expiryTime;
+    return Date.now() > this._expiryTime;
   }
 }
 
@@ -138,7 +132,7 @@ let cachedWeatherResults = new Map();
 let invalidLocations = new Map();
 
 // Our provider.
-class ProviderDynamicWeatherTest extends UrlbarProvider {
+class ProviderQuickSuggestWeather extends UrlbarProvider {
   constructor() {
     super();
 
@@ -206,7 +200,7 @@ class ProviderDynamicWeatherTest extends UrlbarProvider {
   }
 
   get name() {
-    return "ProviderDynamicWeatherTest";
+    return "ProviderQuickSuggestWeather";
   }
 
   getPriority(queryContext) {
@@ -237,7 +231,10 @@ class ProviderDynamicWeatherTest extends UrlbarProvider {
 
       // Do not fetch data if this query recently failed to return results.
       let timedOutDate = invalidLocations.get(this._currentLocationString);
-      if (timedOutDate && timedOutDate < Date.now() + DEFAULT_EXPIRY) {
+      // Tests can override the default expiry.
+      let expiryStorage = await browser.storage.local.get("testExpiry");
+      let expiry = expiryStorage.testExpiry || DEFAULT_EXPIRY;
+      if (timedOutDate && timedOutDate >= Date.now() - expiry) {
         return false;
       }
       invalidLocations.delete(this._currentLocationString);
@@ -254,7 +251,7 @@ class ProviderDynamicWeatherTest extends UrlbarProvider {
       }
 
       let data = await this.getWeatherData(locationResponse);
-      if (!data) {
+      if (!data || !data.current) {
         invalidLocations.set(this._currentLocationString, Date.now());
         return false;
       }
@@ -358,12 +355,19 @@ class ProviderDynamicWeatherTest extends UrlbarProvider {
    * @param {object} locationData
    *   JSON data from the AccuWeather Geoposition API. See
    *   getLocationDataFromQuery.
-   * @returns {Promise}
-   *   Resolves to AccuWeather weather data for the given location key.
+   * @returns {CachedWeatherResult}
+   *   Resolves to a CachedWeatherResult containing weather data, location data,
+   *   and an expiry time.
    */
   async getWeatherData(locationData) {
-    if (TESTING_MODE) {
-      return new CachedWeatherResult(TEST_CURRENT_JSON, locationData);
+    const storage = await browser.storage.local.get(null);
+    if (storage.testWeatherJson) {
+      let expiry = Date.now() + (storage.testExpiry || DEFAULT_EXPIRY);
+      return new CachedWeatherResult(
+        storage.testWeatherJson,
+        locationData,
+        expiry
+      );
     }
 
     const locationKey = locationData?.Key;
@@ -395,8 +399,9 @@ class ProviderDynamicWeatherTest extends UrlbarProvider {
    *   Resolves to an Object: {latitude, longitude, locality}
    */
   async getLocationDataFromQuery(query) {
-    if (TESTING_MODE) {
-      return TEST_LOCATION_JSON;
+    const storage = await browser.storage.local.get("testLocationJson");
+    if (storage.testLocationJson) {
+      return storage.testLocationJson[0];
     }
 
     const url = new URL("https://apidev.accuweather.com");
@@ -466,8 +471,9 @@ class ProviderDynamicWeatherTest extends UrlbarProvider {
   }
 }
 
-let testProvider;
+let weatherProvider;
 (async function main() {
-  testProvider = new ProviderDynamicWeatherTest();
-  addProvider(testProvider);
+  weatherProvider = new ProviderQuickSuggestWeather();
+  addProvider(weatherProvider);
+  sendTestMessage("ready");
 })();

@@ -1,23 +1,23 @@
 {
   "manifest_version": 2,
-  "name": "Dynamic Weather Test",
-  "version": "1.1a",
+  "name": "Firefox Quick Suggest Weather",
+  "version": "1.2a",
   "description": "Adds a weather forecast item to the Firefox Urlbar.",
   "applications": {
     "gecko": {
       "id": "urlbar-dynamic-weather@mozilla.org",
-      "strict_min_version": "79.0"
+      "strict_min_version": "84.0"
     }
   },
   "browser_specific_settings": {
     "gecko": {
       "id": "urlbar-dynamic-weather@mozilla.org",
-      "strict_min_version": "79.0"
+      "strict_min_version": "84.0"
     }
   },
   "permissions": [
     "https://apidev.accuweather.com/*",
-    "runtime",
+    "storage",
     "tabs",
     "urlbar"
   ],
