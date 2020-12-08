@@ -12,9 +12,23 @@ XPCOMUtils.defineLazyModuleGetters(this, {
   AddonManager: "resource://gre/modules/AddonManager.jsm",
   AddonStudies: "resource://normandy/lib/AddonStudies.jsm",
   AddonTestUtils: "resource://testing-common/AddonTestUtils.jsm",
+  ExtensionStorageIDB: "resource://gre/modules/ExtensionStorageIDB.jsm",
   NormandyTestUtils: "resource://testing-common/NormandyTestUtils.jsm",
   TelemetryTestUtils: "resource://testing-common/TelemetryTestUtils.jsm",
+  UrlbarTestUtils: "resource://testing-common/UrlbarTestUtils.jsm",
 });
+
+const { WebExtensionPolicy } = Cu.getGlobalForObject(
+  ChromeUtils.import("resource://gre/modules/Services.jsm", {})
+);
+
+// The path of the add-on file relative to `getTestFilePath`.
+const ADDON_PATH = "firefox_quick_suggest_weather-1.2a.zip";
+
+// Use SIGNEDSTATE_MISSING when testing an unsigned, in-development version of
+// the add-on and SIGNEDSTATE_PRIVILEGED when testing the production add-on.
+const EXPECTED_ADDON_SIGNED_STATE = AddonManager.SIGNEDSTATE_MISSING;
+// const EXPECTED_ADDON_SIGNED_STATE = AddonManager.SIGNEDSTATE_PRIVILEGED;
 
 AddonTestUtils.initMochitest(this);
 
@@ -223,4 +237,19 @@ async function withAddon(callback) {
       : Promise.resolve(),
     addon.uninstall(),
   ]);
+}
+
+/**
+ * Gets a connection to the extension's "local" storage, which is an IndexedDB
+ * database.
+ *
+ * @return {object}
+ *   The IndexedDB connection.
+ */
+async function getExtensionStorage() {
+  let policy = WebExtensionPolicy.getByID(gAddonID);
+  let storagePrincipal = ExtensionStorageIDB.getStoragePrincipal(
+    policy.extension
+  );
+  return ExtensionStorageIDB.open(storagePrincipal);
 }
