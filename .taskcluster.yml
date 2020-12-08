@@ -1,0 +1,47 @@
+version: 1
+policy:
+  pullRequests: collaborators
+tasks:
+  $let:
+    head_rev:
+      $if: tasks_for == "github-pull-request"
+      then: '${event.pull_request.head.sha}'
+      else: '${event.after}'
+    repository:
+      $if: tasks_for == "github-pull-request"
+      then: '${event.pull_request.head.repo.html_url}'
+      else: '${event.repository.html_url}'
+  in:
+    $match:
+      '(tasks_for == "github-pull-request" && event["action"] in ["opened","reopened","synchronize"])':
+        taskId:
+          $eval: as_slugid("test")
+        deadline:
+          $fromNow: 1 day
+        provisionerId: proj-getting-started
+        workerType: tutorial
+        metadata:
+          name: Run mochitests
+          description: ''
+          owner: '${event.sender.login}@users.noreply.github.com'
+          source: '${event.repository.url}'
+        payload:
+          maxRunTime: 3600
+          image: node
+          command:
+            - /bin/bash
+            - '--login'
+            - '-c'
+            - >-
+              hg clone https://hg.mozilla.org/mozilla-central/ &&
+              cd mozilla-central &&
+              ./mach bootstrap --no-interactive --application-choice browser_artifact_mode &&
+              cd .. && git clone ${repository} repo && cd repo &&
+              git config advice.detachedHead false && git checkout ${head_rev} &&
+              npm install . &&
+              cp -R tests/* ../mozilla-central/testing/extensions &&
+              web-ext build &&
+              cp web-ext-artifacts/firefox_quick_suggest_weather-1.2a.zip ../mozilla-central/testing/extensions/tests/browser &&
+              cd ../mozilla-central &&
+              ./mach build &&
+              ./mach mochitest -f browser testing/extensions/tests/browser
