@@ -46,12 +46,15 @@ add_task(async function basic() {
     ["weather at new york", true],
     ["weather at", false],
     ["new york weather", true],
+    ["new york      weather", true],
+    ["weather new york", true],
     ["weather", false],
     ["new york forecast", true],
     ["forecast", false],
     ["toronto forecast", true],
     // We wait until the place name is three characters long.
     ["weather in ny", false],
+    ["NEW YORK WEATHER", true],
   ];
   await withAddon(async () => {
     const storageConn = await getExtensionStorage();

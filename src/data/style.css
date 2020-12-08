@@ -27,11 +27,17 @@
   align-items: center !important;
 }
 
-.urlbarView-dynamic-dynamicWeather-icon {
-  height: 44px;
+.urlbarView-row[dynamicType=dynamicWeather] > .urlbarView-row-inner > .urlbarView-no-wrap > .urlbarView-favicon {
+  /* Override height on .urlbarView-favicon. */
+  height: 44px !important;
   max-width: 100%;
-  margin-inline-end: 4px;
-  -moz-context-properties: fill;
+}
+
+@media (min-resolution: 2dppx) {
+  .urlbarView-row[dynamicType=dynamicWeather] > .urlbarView-row-inner > .urlbarView-no-wrap > .urlbarView-favicon {
+    /* Override transform on .urlbarView-favicon since we want the icon and the text to be vertically centered. */
+    transform: none !important;
+  }
 }
 
 .urlbarView-dynamic-dynamicWeather-textContent {
