@@ -1,4 +1,4 @@
-# dynamic-weather-result-extension
+# firefox-quick-suggest-weather
 
 Watch a [short demo video](https://imgur.com/a/mykAcB6).
 
@@ -44,7 +44,7 @@ need [mozilla-beta].
 
 Then:
 
-1. `cd` into your dynamic-weather-result-extension clone.
+1. `cd` into your firefox-quick-suggest-weather clone.
 2. Copy tests/* into srcdir/testing/extensions, where *srcdir* is the top-level
    directory of your Firefox repo:
 
