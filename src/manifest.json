@@ -2,16 +2,16 @@
   "manifest_version": 2,
   "name": "Firefox Quick Suggest Weather",
   "version": "1.2a",
-  "description": "Adds a weather forecast item to the Firefox Urlbar.",
+  "description": "Adds a weather forecast result to the Firefox Address Bar.",
   "applications": {
     "gecko": {
-      "id": "urlbar-dynamic-weather@mozilla.org",
+      "id": "urlbar-quicksuggest-weather@mozilla.org",
       "strict_min_version": "84.0"
     }
   },
   "browser_specific_settings": {
     "gecko": {
-      "id": "urlbar-dynamic-weather@mozilla.org",
+      "id": "urlbar-quicksuggest-weather@mozilla.org",
       "strict_min_version": "84.0"
     }
   },
