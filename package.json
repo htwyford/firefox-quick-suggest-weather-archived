@@ -1,7 +1,7 @@
 {
-  "name": "dynamic-result-type-extension",
-  "version": "1.0a",
-  "description": "An example extension for dynamic result types.",
+  "name": "urlbar-quicksuggest-weather",
+  "version": "1.2a",
+  "description": "Adds a weather forecast result to the Firefox Address Bar.",
   "private": true,
   "license": "MPLv2",
   "webExt": {
